@@ -4,14 +4,14 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 V = TypeVar('V') # variable type
 D = TypeVar('D') # domain type
-  
-  
+
+
 # Base class for all constraints
 class Constraint(Generic[V, D], ABC):
     # The variables that the constraint is between
-    def __init__(self, *args: V):
-        self.variables = args
-  
+    def __init__(self, variables: List[V]):
+        self.variables = variables
+
     # Must be overridden by subclasses
     @abstractmethod
     def satisfied(self, assignment: Dict[V, D]) -> bool:
@@ -30,14 +30,14 @@ class CSP(Generic[V, D]):
             self.constraints[variable] = []
             if variable not in self.domains:
                 raise LookupError("Every variable should have a domain assigned to it.")
-  
+
     def add_constraint(self, constraint: Constraint[V, D]):
         for variable in constraint.variables:
             if variable not in self.variables:
                 raise LookupError("Variable in constraint not in CSP")
             else:
                 self.constraints[variable].append(constraint)
-    
+
     # Check if the value assignment is consistent by checking all constraints
     # for the given variable against it
     def consistent(self, variable: V, assignment: Dict[V, D]) -> bool:
@@ -45,15 +45,15 @@ class CSP(Generic[V, D]):
             if not constraint.satisfied(assignment):
                 return False
         return True
-    
+
     def backtracking_search(self, assignment: Dict[V, D] = {}) -> Optional[Dict[V, D]]:
         # assignment is complete if every variable is assigned (our base case)
         if len(assignment) == len(self.variables):
             return assignment
-    
+
         # get all variables in the CSP but not in the assignment
         unassigned: List[V] = [v for v in self.variables if v not in assignment]
-    
+
         # get every possible domain value of the first unassigned variable
         first: V = unassigned[0]
         for value in self.domains[first]:

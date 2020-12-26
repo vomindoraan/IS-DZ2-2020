@@ -1,10 +1,10 @@
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
-from enum import Enum
+from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
+import itertools
 from marshmallow_dataclass import NewType
 from marshmallow_dataclass import dataclass as mm_dataclass
 
@@ -52,12 +52,13 @@ class ScheduleSlot:
     halls: Set[Hall]
 
 
+TERM_START_DATE = date(2020, 1, 1)
 VALID_START_TIMES = (time(8,00), time(11,30), time(15,00), time(18,30))
 
 
 class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
-    def __init__(self, *exams: Exam):
-        super().__init__(*exams)
+    def __init__(self, exams: List[Exam]):
+        super().__init__(exams)
         self.exams = exams
 
     def satisfied(self, assignment: Dict[Exam, ScheduleSlot]) -> bool:
@@ -119,14 +120,15 @@ if __name__ == '__main__':
 
     timeslots = []
     for d in range(term.duration_days):
-        day = date(2020, 1, d)
+        day = TERM_START_DATE + timedelta(days=d)
         for time in VALID_START_TIMES:
             timeslots.append(datetime.combine(day, time))
 
     schedule_slots = itertools.permutations(halls)
+    print(schedule_slots)
 
     variables = term.exams
     domains = {v: schedule_slots for v in variables}
 
     csp = CSP(variables, domains)
-    csp.add_constraint(ExamSchedulingConstraint(term.exams))
+    csp.add_constraint(ExamSchedulingConstraint(variables))

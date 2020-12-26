@@ -8,7 +8,7 @@ class MapColoringConstraint(Constraint[str, str]):
         super().__init__(place1, place2)
         self.place1: str = place1
         self.place2: str = place2
-  
+
     def satisfied(self, assignment: Dict[str, str]) -> bool:
         # If either place is not in the assignment then it is not
         # yet possible for their colors to be conflicting
@@ -37,8 +37,8 @@ if __name__ == '__main__':
     csp.add_constraint(MapColoringConstraint("Victoria", "New South Wales"))
     csp.add_constraint(MapColoringConstraint("Victoria", "Tasmania"))
 
-    solution: Optional[Dict[str, str]] = csp.backtracking_search()  
-    if solution is None:      
-        print("No solution found!")  
+    solution: Optional[Dict[str, str]] = csp.backtracking_search()
+    if solution is None:
+        print("No solution found!")
     else:
         print(solution)
