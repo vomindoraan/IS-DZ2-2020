@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
-import itertools
+from itertools import chain, combinations
 from marshmallow_dataclass import NewType
 from marshmallow_dataclass import dataclass as mm_dataclass
 
@@ -90,7 +90,7 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
             # За сваки одсек важи да се у једном дану не могу распоредити два или више
             # испита са исте године студија који се на том одсеку нуде.
             for dept in exam.departments:
-                constraint = (dept, exam.subject.year)
+                constraint = (dept, exam.subject[5])
                 if constraint in dept_year_constraints[start_day]:
                     return False
                 dept_year_constraints[start_day].add(constraint)
@@ -98,37 +98,44 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
         return True
 
 
+def powerset(iterable):
+    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
+
+
 if __name__ == '__main__':
-    term:      Term
-    halls:     List[Hall]
-    timeslots: List[datetime]
-    variables: List[Exam]
-    domains:   Dict[Exam, List[ScheduleSlot]]
-    csp:       CSP[Exam, ScheduleSlot]
-    solution:  Optional[Dict[Exam, ScheduleSlot]]
+    from pprint import pprint
+
+    term:  Term
+    halls: List[Hall]
 
     i = input("Test #: ")
     with open(f'test/rok{i}.json') as f:
         data = json.load(f)
         term = Term.Schema().load(data)
-        print(term)
+        # print(term)
 
     with open(f'test/sale{i}.json') as f:
         data = json.load(f)
         halls = Hall.Schema(many=True).load(data)
-        print(halls)
+        # print(halls)
 
-    timeslots = []
+    schedule_slots = []
+    halls_powerset = list(powerset(halls))
     for d in range(term.duration_days):
         day = TERM_START_DATE + timedelta(days=d)
         for time in VALID_START_TIMES:
-            timeslots.append(datetime.combine(day, time))
-
-    schedule_slots = itertools.permutations(halls)
-    print(schedule_slots)
+            start = datetime.combine(day, time)
+            for halls in halls_powerset:
+                slot = ScheduleSlot(start, set(halls))
+                schedule_slots.append(slot)
 
     variables = term.exams
-    domains = {v: schedule_slots for v in variables}
+    domains = {v: schedule_slots.copy() for v in variables}
 
     csp = CSP(variables, domains)
     csp.add_constraint(ExamSchedulingConstraint(variables))
+
+    solution = csp.backtracking_search()
+    pprint(solution)
