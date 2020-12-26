@@ -2,15 +2,14 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from itertools import chain, combinations
 from typing import Dict, List, Optional, Set, Tuple
 
-from itertools import chain, combinations
 from marshmallow_dataclass import NewType
 from marshmallow_dataclass import dataclass as mm_dataclass
 
 from csp import CSP, Constraint
 
-# @dataclass
 # class Subject(str):
 #     # accreditation: int
 #     # study_program: str
@@ -20,15 +19,17 @@ from csp import CSP, Constraint
 #     @property
 #     def year(self) -> int:
 #         return int(self[5])
-Subject = NewType('Subject', str)
 
 
-@mm_dataclass(frozen=True)
+@mm_dataclass(unsafe_hash=True)
 class Exam:
-    subject: Subject = field(metadata={'data_key': 'sifra'})
+    subject: str = field(metadata={'data_key': 'sifra'})
     n_applied: int = field(metadata={'data_key': 'prijavljeni'})
     needs_computers: bool = field(metadata={'data_key': 'racunari'})
-    departments: Tuple[str] = field(metadata={'data_key': 'odseci'})
+    departments: List[str] = field(metadata={'data_key': 'odseci'})
+
+    def __post_init__(self):
+        self.departments = tuple(self.departments)  # FIXME
 
 
 @mm_dataclass(frozen=True)
@@ -90,7 +91,7 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
             # За сваки одсек важи да се у једном дану не могу распоредити два или више
             # испита са исте године студија који се на том одсеку нуде.
             for dept in exam.departments:
-                constraint = (dept, exam.subject[5])
+                constraint = (dept, exam.subject[5])  # FIXME
                 if constraint in dept_year_constraints[start_day]:
                     return False
                 dept_year_constraints[start_day].add(constraint)
@@ -99,7 +100,6 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
 
 
 def powerset(iterable):
-    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
 
