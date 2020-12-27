@@ -1,25 +1,12 @@
-import csv
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from itertools import chain, combinations
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
-from marshmallow_dataclass import NewType
 from marshmallow_dataclass import dataclass as mm_dataclass
 
 from csp import CSP, Constraint
-
-# class Subject(str):
-#     # accreditation: int
-#     # study_program: str
-#     # parent_department: int
-#     # year: int
-#     # subject_id: str
-#     @property
-#     def year(self) -> int:
-#         return int(self[5])
 
 
 @mm_dataclass(unsafe_hash=True)
@@ -30,7 +17,7 @@ class Exam:
     departments: List[str] = field(metadata={'data_key': 'odseci'})
 
     def __post_init__(self):
-        self.departments = tuple(self.departments)  # FIXME
+        self.departments = tuple(self.departments)
 
 
 @mm_dataclass(frozen=True)
@@ -41,7 +28,7 @@ class Term:
 
 @mm_dataclass(frozen=True)
 class Hall:
-    hall: str = field(metadata={'data_key': 'naziv'})
+    hall_name: str = field(metadata={'data_key': 'naziv'})
     capacity: int = field(metadata={'data_key': 'kapacitet'})
     has_computers: bool = field(metadata={'data_key': 'racunari'})
     n_proctors: int = field(metadata={'data_key': 'dezurni'})
@@ -52,6 +39,12 @@ class Hall:
 class ScheduleSlot:
     start: datetime
     halls: Set[Hall]
+
+
+@dataclass
+class SolutionPair:
+    exam: Exam
+    slot: ScheduleSlot
 
 
 TERM_START_DATE = date(2020, 1, 1)
@@ -92,7 +85,8 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
             # За сваки одсек важи да се у једном дану не могу распоредити два или више
             # испита са исте године студија који се на том одсеку нуде.
             for dept in exam.departments:
-                constraint = (dept, exam.subject[5])  # FIXME
+                year = int(exam.subject[5])
+                constraint = (dept, year)
                 if constraint in dept_year_constraints[start_day]:
                     return False
                 dept_year_constraints[start_day].add(constraint)
@@ -100,27 +94,23 @@ class ExamSchedulingConstraint(Constraint[Exam, ScheduleSlot]):
         return True
 
 
-def powerset(iterable):
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
-
-
 if __name__ == '__main__':
+    import csv
+    from itertools import chain, combinations
     from pprint import pprint
 
-    term:  Term
+    term: Term
     halls: List[Hall]
 
     i = input("Test #: ")
     with open(f'test/rok{i}.json') as f:
-        data = json.load(f)
-        term = Term.Schema().load(data)
-        # print(term)
-
+        term = Term.Schema().load(json.load(f))
     with open(f'test/sale{i}.json') as f:
-        data = json.load(f)
-        halls = Hall.Schema(many=True).load(data)
-        # print(halls)
+        halls = Hall.Schema(many=True).load(data = json.load(f))
+
+    def powerset(iterable):
+        s = list(iterable)
+        return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
 
     schedule_slots = []
     halls_powerset = list(powerset(halls))
@@ -128,8 +118,8 @@ if __name__ == '__main__':
         day = TERM_START_DATE + timedelta(days=d)
         for time in VALID_START_TIMES:
             start = datetime.combine(day, time)
-            for halls in halls_powerset:
-                slot = ScheduleSlot(start, set(halls))
+            for halls_subset in halls_powerset:
+                slot = ScheduleSlot(start, set(halls_subset))
                 schedule_slots.append(slot)
 
     variables = term.exams
@@ -138,36 +128,36 @@ if __name__ == '__main__':
     csp = CSP(variables, domains)
     csp.add_constraint(ExamSchedulingConstraint(variables))
 
-    solution = csp.backtracking_search()
-    # pprint(solution)
+    solutions = csp.backtracking_search()
+    pprint(solutions)
 
-    def find_items(solution, start):
-        items = []
-        for exam, slot in solution.items():
+    def filter_by_time(solutions, start):
+        for exam, slot in solutions.items():
             if slot.start == start:
-                items.append((exam, slot))
-        return items
+                yield SolutionPair(exam, slot)
 
-    with open(f'test/out{i}.csv', mode='w') as f:
+    with open(f'test/out{i}.csv', mode='w', newline='') as f:
         writer = csv.writer(f)
 
         for d in range(term.duration_days):
-            hls = map(lambda h: h.hall, halls)
-            writer.writerow([f'Dan{d}', *hls])
+            day_str = f'Dan{d+1}'
+            hall_names = map(lambda h: h.hall_name, halls)
+            writer.writerow([day_str, *hall_names])
 
-            for st in VALID_START_TIMES:
-                start = datetime.combine(
-                    date=TERM_START_DATE + timedelta(days=d),
-                    time=st
-                )
-                items = find_items(solution, start)
-                out = []
+            for time in VALID_START_TIMES:
+                day = TERM_START_DATE + timedelta(days=d)
+                start = datetime.combine(day, time)
+                pairs = list(filter_by_time(solutions, start))
+
+                subjects = []
                 for hall in halls:
                     try:
-                        itm = next(i for i in items if hall in i[1].halls)
-                        out.append(itm[0].subject)
+                        pair = next(p for p in pairs if hall in p.slot.halls)
+                        subjects.append(pair.exam.subject)
                     except StopIteration:
-                        out.append("X")
+                        subjects.append('X')
 
-                writer.writerow([str(st)[:5], *out])
+                time_str = time.strftime('%H:%M')
+                writer.writerow([time_str, *subjects])
+
             writer.writerow([])
