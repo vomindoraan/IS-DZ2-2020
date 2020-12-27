@@ -1,3 +1,4 @@
+import csv
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -138,4 +139,35 @@ if __name__ == '__main__':
     csp.add_constraint(ExamSchedulingConstraint(variables))
 
     solution = csp.backtracking_search()
-    pprint(solution)
+    # pprint(solution)
+
+    def find_items(solution, start):
+        items = []
+        for exam, slot in solution.items():
+            if slot.start == start:
+                items.append((exam, slot))
+        return items
+
+    with open(f'test/out{i}.csv', mode='w') as f:
+        writer = csv.writer(f)
+
+        for d in range(term.duration_days):
+            hls = map(lambda h: h.hall, halls)
+            writer.writerow([f'Dan{d}', *hls])
+
+            for st in VALID_START_TIMES:
+                start = datetime.combine(
+                    date=TERM_START_DATE + timedelta(days=d),
+                    time=st
+                )
+                items = find_items(solution, start)
+                out = []
+                for hall in halls:
+                    try:
+                        itm = next(i for i in items if hall in i[1].halls)
+                        out.append(itm[0].subject)
+                    except StopIteration:
+                        out.append("X")
+
+                writer.writerow([str(st)[:5], *out])
+            writer.writerow([])
